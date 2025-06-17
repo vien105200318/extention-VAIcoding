@@ -1,0 +1,56 @@
+{
+    "name": "gemini-code-assistant",
+    "displayName": "Gemini Code Assistant",
+    "description": "Generate code snippets using Google Gemini.",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Programming Languages",
+        "AI"
+    ],
+    "activationEvents": [
+        "onCommand:gemini-code-assistant.generateCode"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "gemini-code-assistant.generateCode",
+                "title": "Gemini: Generate Code"
+            }
+        ],
+        "configuration": {
+            "title": "Gemini Code Assistant Configuration",
+            "properties": {
+                "geminiCodeAssistant.apiKey": {
+                    "type": "string",
+                    "description": "Your Google Gemini API Key.",
+                    "scope": "resource"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",   
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "package": "vsce package",
+        "test": "npm run compile && npm run unit-test"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.80.0",
+        "@types/node": "^16.18.91",
+        "@typescript-eslint/eslint-plugin": "^7.11.0",
+        "@typescript-eslint/parser": "^7.11.0",
+        "eslint": "^8.57.0",
+        "typescript": "^5.4.5",
+        "@vscode/test-cli": "^0.0.9",
+        "@vscode/test-electron": "^2.4.0",
+        "vsce": "latest"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.14.0"
+    }
+}
