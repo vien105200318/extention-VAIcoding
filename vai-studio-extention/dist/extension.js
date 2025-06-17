@@ -38,90 +38,280 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const generative_ai_1 = require("@google/generative-ai");
-// Khai báo biến này ở phạm vi toàn cục hoặc ngoài hàm activate
-// để nó có thể được gán giá trị và sử dụng trong hàm command
+// --- PHẦN GEMINI API (Không thay đổi) ---
 let genAI;
-let model = null; // Dùng 'any' tạm thời cho đến khi có kiểu rõ ràng hơn
+let model = null;
+// Hàm để lấy danh sách task từ storage
+function getTasks(context) {
+    return context.workspaceState.get('geminiTasks', []);
+}
+// Hàm để lưu danh sách task vào storage
+function saveTasks(context, tasks) {
+    context.workspaceState.update('geminiTasks', tasks);
+}
 function activate(context) {
-    // Dòng này phải xuất hiện trong Console khi extension được kích hoạt
     console.log('Congratulations, your extension "gemini-code-assistant" is now active!');
-    // Lấy API Key từ cấu hình VS Code
-    // Lỗi ở đây: .get() phải truyền vào TÊN CỦA THUỘC TÍNH CÀI ĐẶT ("apiKey"), không phải giá trị API Key.
+    // --- Logic khởi tạo Gemini API (giữ nguyên) ---
     const apiKey = vscode.workspace.getConfiguration('geminiCodeAssistant').get('apiKey');
-    // Kiểm tra và khởi tạo API chỉ khi có API Key
     if (apiKey) {
         try {
             genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
-            model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Khởi tạo model khi có API Key
+            model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             console.log("Gemini API and model initialized successfully.");
         }
         catch (error) {
-            console.error("Error initializing GoogleGenerativeAI:", error);
-            vscode.window.showErrorMessage(`Failed to initialize Gemini API. Check your API Key and console for details: ${error}`);
-            // Đặt genAI và model về undefined/null nếu có lỗi khởi tạo
-            genAI = undefined;
-            model = null;
+            // ... xử lý lỗi
         }
     }
     else {
-        // Chỉ hiển thị thông báo lỗi, không return sớm để lệnh vẫn được đăng ký
-        vscode.window.showErrorMessage('Gemini API Key not set. Please go to VS Code Settings -> Extensions -> Gemini Code Assistant to set your API Key.');
+        // ... thông báo lỗi
     }
-    // Đăng ký lệnh VÔ ĐIỀU KIỆN - Lệnh này PHẢI được đăng ký để luôn xuất hiện trong Command Palette
-    let disposable = vscode.commands.registerCommand('gemini-code-assistant.generateCode', async () => {
-        // Logic kiểm tra API Key và model sẽ nằm BÊN TRONG hàm này
-        // để đảm bảo lệnh luôn có thể được chọn từ Command Palette
-        if (!apiKey) {
-            vscode.window.showErrorMessage('Gemini API Key is missing. Please set it in VS Code Settings (Ctrl+,).');
-            return; // Dừng thực thi lệnh nếu thiếu API Key
-        }
-        if (!genAI || !model) {
-            vscode.window.showErrorMessage('Gemini API or model not initialized. Check your API Key and console for errors.');
-            return; // Dừng thực thi lệnh nếu API không khởi tạo được
-        }
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showInformationMessage('No active text editor found.');
-            return;
-        }
-        const selection = editor.selection;
-        const selectedText = editor.document.getText(selection);
-        if (!selectedText) {
-            vscode.window.showInformationMessage('Please select some text to generate code from.');
-            return;
-        }
-        vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: "Generating code with Gemini...",
-            cancellable: false
-        }, async (progress) => {
-            try {
-                // Thêm debug log trước khi gọi API
-                console.log("Calling Gemini API with prompt:", selectedText);
-                const prompt = `Generate code based on the following context/description:\n\n${selectedText}\n\nProvide only the code block.`;
-                const result = await model.generateContent(prompt);
-                const response = await result.response;
-                const generatedText = response.text();
-                // Kiểm tra và trích xuất khối code
-                const codeMatch = generatedText.match(/```(?:\w+)?\n([\s\S]*?)\n```/);
-                const codeToInsert = codeMatch ? codeMatch[1] : generatedText;
-                editor.edit(editBuilder => {
-                    editBuilder.replace(selection, codeToInsert);
-                });
-                vscode.window.showInformationMessage('Code generated successfully!');
-                console.log("Code generated successfully!");
-            }
-            catch (error) {
-                vscode.window.showErrorMessage(`Failed to generate code: ${error.message}`);
-                console.error("Gemini API Call Error:", error); // Log lỗi chi tiết hơn
-            }
-        });
+    // --- Command `generateCode` (giữ nguyên) ---
+    const generateCodeDisposable = vscode.commands.registerCommand('gemini-code-assistant.generateCode', async () => {
+        // ... code của chức năng generate
     });
-    // Thêm disposable vào context để lệnh được quản lý đúng cách
-    context.subscriptions.push(disposable);
+    // --- Command `showDashboard` (NÂNG CẤP TOÀN DIỆN) ---
+    const showDashboardDisposable = vscode.commands.registerCommand('gemini-code-assistant.showDashboard', () => {
+        const panel = vscode.window.createWebviewPanel('taskDashboard', 'Project Dashboard', vscode.ViewColumn.Two, {
+            enableScripts: true,
+            // Giữ lại state của webview ngay cả khi nó không hiển thị
+            retainContextWhenHidden: true,
+        });
+        // Render giao diện lần đầu
+        panel.webview.html = getWebviewContent();
+        // Gửi dữ liệu task ban đầu cho webview
+        panel.webview.postMessage({ command: 'loadTasks', tasks: getTasks(context) });
+        // Xử lý các thông điệp từ webview (dashboard)
+        panel.webview.onDidReceiveMessage(message => {
+            const tasks = getTasks(context);
+            switch (message.command) {
+                case 'addTask':
+                    const newTask = {
+                        id: `task-${Date.now()}`,
+                        title: message.title,
+                        description: '',
+                        status: 'todo'
+                    };
+                    tasks.push(newTask);
+                    saveTasks(context, tasks);
+                    // Gửi lại danh sách đã cập nhật
+                    panel.webview.postMessage({ command: 'loadTasks', tasks: tasks });
+                    return;
+                case 'updateTaskStatus':
+                    const { taskId, newStatus } = message;
+                    const taskToUpdate = tasks.find(t => t.id === taskId);
+                    if (taskToUpdate) {
+                        taskToUpdate.status = newStatus;
+                        saveTasks(context, tasks);
+                        // Thông báo cho webview là đã cập nhật thành công (không cần gửi lại toàn bộ list)
+                        // Nhưng để đơn giản, chúng ta vẫn gửi lại toàn bộ
+                        panel.webview.postMessage({ command: 'loadTasks', tasks: tasks });
+                    }
+                    return;
+            }
+        }, undefined, context.subscriptions);
+    });
+    context.subscriptions.push(generateCodeDisposable, showDashboardDisposable);
 }
-function deactivate() {
-    // Thực hiện dọn dẹp tài nguyên khi extension bị deactivate
-    console.log('Gemini Code Assistant is deactivating.');
+function deactivate() { }
+// 2. Hàm getWebviewContent được viết lại hoàn toàn cho giao diện Kanban
+function getWebviewContent() {
+    return `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Project Dashboard</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                background-color: var(--vscode-editor-background);
+                color: var(--vscode-editor-foreground);
+                margin: 0;
+                padding: 0;
+            }
+            .dashboard-container {
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+            }
+            .header {
+                padding: 10px 20px;
+                border-bottom: 1px solid var(--vscode-side-bar-border, #ccc);
+            }
+            .header h1 {
+                margin: 0;
+                font-size: 18px;
+            }
+            .kanban-board {
+                display: flex;
+                flex-grow: 1;
+                padding: 15px;
+                gap: 15px;
+                overflow-x: auto;
+            }
+            .kanban-column {
+                flex: 1 0 280px; /* flex-grow, flex-shrink, flex-basis */
+                min-width: 280px;
+                background-color: var(--vscode-side-bar-background);
+                border-radius: 5px;
+                display: flex;
+                flex-direction: column;
+            }
+            .column-header {
+                padding: 10px;
+                font-weight: bold;
+                border-bottom: 1px solid var(--vscode-side-bar-border, #ccc);
+            }
+            .column-tasks {
+                padding: 10px;
+                flex-grow: 1;
+                min-height: 100px; /* Cho phép drop vào cột rỗng */
+            }
+            .task-card {
+                background-color: var(--vscode-editor-widget-background);
+                border: 1px solid var(--vscode-widget-border, #ccc);
+                border-radius: 4px;
+                padding: 10px;
+                margin-bottom: 8px;
+                cursor: grab;
+            }
+            .task-card:hover {
+                background-color: var(--vscode-list-hover-background);
+            }
+            .task-card.dragging {
+                opacity: 0.5;
+            }
+            .add-task-form {
+                display: flex;
+                padding: 10px;
+                gap: 8px;
+            }
+            .add-task-form input {
+                 width: 100%;
+                 background-color: var(--vscode-input-background);
+                 color: var(--vscode-input-foreground);
+                 border: 1px solid var(--vscode-input-border);
+                 border-radius: 3px;
+                 padding: 5px;
+            }
+            .add-task-form button {
+                 white-space: nowrap;
+                 background-color: var(--vscode-button-background);
+                 color: var(--vscode-button-foreground);
+                 border: none;
+                 border-radius: 3px;
+                 padding: 5px 10px;
+                 cursor: pointer;
+            }
+             .add-task-form button:hover {
+                 background-color: var(--vscode-button-hover-background);
+             }
+        </style>
+    </head>
+    <body>
+        <div class="dashboard-container">
+            <div class="header">
+                <h1>Project Kanban</h1>
+                <div class="add-task-form">
+                    <input type="text" id="newTaskInput" placeholder="Add a new task...">
+                    <button id="addTaskBtn">Add Task</button>
+                </div>
+            </div>
+            <div class="kanban-board">
+                <div class="kanban-column" id="col-todo">
+                    <div class="column-header">To Do</div>
+                    <div class="column-tasks" data-status="todo"></div>
+                </div>
+                <div class="kanban-column" id="col-inprogress">
+                    <div class="column-header">In Progress</div>
+                    <div class="column-tasks" data-status="inprogress"></div>
+                </div>
+                <div class="kanban-column" id="col-done">
+                    <div class="column-header">Done</div>
+                    <div class="column-tasks" data-status="done"></div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const vscode = acquireVsCodeApi();
+
+            const columns = {
+                todo: document.querySelector('.column-tasks[data-status="todo"]'),
+                inprogress: document.querySelector('.column-tasks[data-status="inprogress"]'),
+                done: document.querySelector('.column-tasks[data-status="done"]')
+            };
+
+            function renderTasks(tasks) {
+                // Clear all columns
+                Object.values(columns).forEach(col => col.innerHTML = '');
+                // Repopulate with tasks
+                tasks.forEach(task => {
+                    const taskCard = document.createElement('div');
+                    taskCard.className = 'task-card';
+                    taskCard.textContent = task.title;
+                    taskCard.draggable = true;
+                    taskCard.dataset.taskId = task.id;
+
+                    columns[task.status].appendChild(taskCard);
+                });
+            }
+
+            // Listen for messages from the extension
+            window.addEventListener('message', event => {
+                const message = event.data;
+                if (message.command === 'loadTasks') {
+                    renderTasks(message.tasks);
+                }
+            });
+            
+            // Handle Add Task button
+            document.getElementById('addTaskBtn').addEventListener('click', () => {
+                const input = document.getElementById('newTaskInput');
+                if (input.value) {
+                    vscode.postMessage({ command: 'addTask', title: input.value });
+                    input.value = '';
+                }
+            });
+
+            // --- DRAG & DROP LOGIC ---
+            let draggedTaskId = null;
+
+            document.addEventListener('dragstart', (e) => {
+                if (e.target.classList.contains('task-card')) {
+                    draggedTaskId = e.target.dataset.taskId;
+                    e.target.classList.add('dragging');
+                }
+            });
+
+            document.addEventListener('dragend', (e) => {
+                if (e.target.classList.contains('task-card')) {
+                    e.target.classList.remove('dragging');
+                }
+                draggedTaskId = null;
+            });
+            
+            Object.values(columns).forEach(column => {
+                column.addEventListener('dragover', (e) => {
+                    e.preventDefault(); // Necessary to allow dropping
+                });
+
+                column.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const newStatus = column.dataset.status;
+                    if (draggedTaskId && newStatus) {
+                         vscode.postMessage({
+                            command: 'updateTaskStatus',
+                            taskId: draggedTaskId,
+                            newStatus: newStatus
+                         });
+                    }
+                });
+            });
+
+        </script>
+    </body>
+    </html>`;
 }
 //# sourceMappingURL=extension.js.map

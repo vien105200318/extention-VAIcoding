@@ -12,7 +12,8 @@
         "AI"
     ],
     "activationEvents": [
-        "onCommand:gemini-code-assistant.generateCode"
+        "onCommand:gemini-code-assistant.generateCode",
+        "onCommand:gemini-code-assistant.showDashboard"
     ],
     "main": "./dist/extension.js",
     "contributes": {
@@ -20,6 +21,10 @@
             {
                 "command": "gemini-code-assistant.generateCode",
                 "title": "Gemini: Generate Code"
+            },
+            {
+                "command": "gemini-code-assistant.showDashboard",
+                "title": "Gemini: Show Task Dashboard"
             }
         ],
         "configuration": {
@@ -33,12 +38,8 @@
             }
         }
     },
-    "categories": [
-        "Programming Languages",
-        "AI"
-    ],
     "scripts": {
-        "vscode:prepublish": "npm run compile",   
+        "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "package": "vsce package",
