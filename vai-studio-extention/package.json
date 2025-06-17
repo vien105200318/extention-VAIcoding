@@ -3,7 +3,7 @@
     "displayName": "Gemini Code Assistant by Vai-studio",
     "description": "Generate code snippets and manage tasks using Google Gemini.",
     "publisher": "Vai-studio",
-    "version": "0.0.3",
+    "version": "0.0.2",
     "engines": {
         "vscode": "^1.80.0"
     },
