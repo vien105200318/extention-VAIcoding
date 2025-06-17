@@ -1,9 +1,9 @@
 {
     "name": "gemini-code-assistant-by-vaistudio",
     "displayName": "Gemini Code Assistant by Vai-studio",
-    "description": "Generate code snippets using Google Gemini.",
+    "description": "Generate code snippets and manage tasks using Google Gemini.",
     "publisher": "Vai-studio",
-    "version": "0.0.1",
+    "version": "0.0.3",
     "engines": {
         "vscode": "^1.80.0"
     },
@@ -13,7 +13,8 @@
     ],
     "activationEvents": [
         "onCommand:gemini-code-assistant.generateCode",
-        "onCommand:gemini-code-assistant.showDashboard"
+        "onCommand:gemini-code-assistant.showDashboard",
+        "onCommand:gemini-code-assistant.generateTasksFromOverview"
     ],
     "main": "./dist/extension.js",
     "contributes": {
@@ -25,6 +26,10 @@
             {
                 "command": "gemini-code-assistant.showDashboard",
                 "title": "Gemini: Show Task Dashboard"
+            },
+            {
+                "command": "gemini-code-assistant.generateTasksFromOverview",
+                "title": "Gemini: Generate Tasks from Overview"
             }
         ],
         "configuration": {
