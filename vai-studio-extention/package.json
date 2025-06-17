@@ -1,7 +1,8 @@
 {
-    "name": "gemini-code-assistant",
-    "displayName": "Gemini Code Assistant",
+    "name": "gemini-code-assistant-by-vaistudio",
+    "displayName": "Gemini Code Assistant by Vai-studio",
     "description": "Generate code snippets using Google Gemini.",
+    "publisher": "Vai-studio",
     "version": "0.0.1",
     "engines": {
         "vscode": "^1.80.0"
@@ -52,5 +53,9 @@
     },
     "dependencies": {
         "@google/generative-ai": "^0.14.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/vien105200318/extention-VAIcoding"
     }
 }
