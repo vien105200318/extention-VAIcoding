@@ -33,6 +33,10 @@
             }
         }
     },
+    "categories": [
+        "Programming Languages",
+        "AI"
+    ],
     "scripts": {
         "vscode:prepublish": "npm run compile",   
         "compile": "tsc -p ./",
