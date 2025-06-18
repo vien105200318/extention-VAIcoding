@@ -51,7 +51,9 @@ function getTasks(context) {
         const defaults = {
             description: '',
             priority: 'medium',
-            status: 'todo'
+            status: 'todo',
+            details: '', // Giá trị mặc định
+            documentationLinks: [] // Giá trị mặc định
         };
         return { ...defaults, ...task };
     });
@@ -123,7 +125,7 @@ function activate(context) {
             dashboardPanel.onDidDispose(() => { dashboardPanel = undefined; }, null, context.subscriptions);
             dashboardPanel.webview.html = getWebviewContent(dashboardPanel.webview);
             dashboardPanel.webview.postMessage({ command: 'loadTasks', tasks: getTasks(context) });
-            dashboardPanel.webview.onDidReceiveMessage(message => {
+            dashboardPanel.webview.onDidReceiveMessage(async (message) => {
                 const tasks = getTasks(context);
                 let updatedTasks = [...tasks];
                 switch (message.command) {
@@ -146,7 +148,70 @@ function activate(context) {
                             taskToUpdatePriority.priority = message.newPriority;
                         }
                         break;
+                    case 'getTaskDetails': // Lệnh mới để lấy chi tiết task
+                        if (!model) {
+                            vscode.window.showErrorMessage('Gemini API is not initialized.');
+                            return;
+                        }
+                        const taskId = message.taskId;
+                        const taskToDetail = updatedTasks.find(t => t.id === taskId);
+                        if (!taskToDetail) {
+                            vscode.window.showErrorMessage('Task not found.');
+                            return;
+                        }
+                        // Kiểm tra nếu task đã có chi tiết, thì không gọi lại Gemini
+                        if (taskToDetail.details && taskToDetail.documentationLinks && taskToDetail.documentationLinks.length > 0) {
+                            console.log(`Task details for ${taskId} already exist. Displaying cached data.`);
+                            if (dashboardPanel) {
+                                dashboardPanel.webview.postMessage({ command: 'displayTaskDetails', task: taskToDetail });
+                            }
+                            break;
+                        }
+                        vscode.window.withProgress({
+                            location: vscode.ProgressLocation.Notification,
+                            title: "Gemini is generating task details and documentation..."
+                        }, async () => {
+                            try {
+                                const prompt = `Based on the following task, provide a detailed breakdown of what needs to be done. Include specific actionable steps and sub-tasks. Also, suggest 3-5 highly relevant documentation links (URLs with a title) that would be helpful for completing this task. Format the output as a JSON object with two fields: "details" (string, markdown allowed for formatting steps) and "documentationLinks" (an array of objects, each with "title" and "url"). Ensure the documentation links are valid and directly related. Do not include any other text or markdown outside the JSON object.
+
+Task Title: "${taskToDetail.title}"
+Task Description: "${taskToDetail.description}"
+
+JSON Output:`;
+                                console.log("Sending prompt to Gemini:", prompt);
+                                const result = await model.generateContent(prompt);
+                                const responseText = result.response.text();
+                                console.log("Gemini raw response:", responseText);
+                                // Cố gắng parse JSON, xử lý các trường hợp Gemini có thể trả về markdown JSON
+                                let jsonString = responseText.replace(/```json\n|\n```/g, '').trim();
+                                let detailResponse;
+                                try {
+                                    detailResponse = JSON.parse(jsonString);
+                                    console.log("Parsed Gemini response:", detailResponse);
+                                }
+                                catch (parseError) {
+                                    console.error("Failed to parse JSON from Gemini response:", parseError);
+                                    // Fallback if JSON parsing fails
+                                    detailResponse = {
+                                        details: `Failed to parse Gemini's response. Raw response: \n${responseText}`,
+                                        documentationLinks: []
+                                    };
+                                }
+                                taskToDetail.details = detailResponse.details || 'No detailed information provided by Gemini.';
+                                taskToDetail.documentationLinks = detailResponse.documentationLinks || [];
+                                saveTasks(context, updatedTasks); // Lưu lại task đã cập nhật chi tiết
+                                if (dashboardPanel) {
+                                    dashboardPanel.webview.postMessage({ command: 'displayTaskDetails', task: taskToDetail });
+                                }
+                            }
+                            catch (error) {
+                                vscode.window.showErrorMessage(`Failed to generate task details: ${error.message}`);
+                                console.error("Error generating task details with Gemini:", error);
+                            }
+                        });
+                        break;
                 }
+                // Save tasks and update dashboard after any change
                 saveTasks(context, updatedTasks);
                 if (dashboardPanel) {
                     dashboardPanel.webview.postMessage({ command: 'loadTasks', tasks: updatedTasks });
@@ -213,6 +278,42 @@ function getWebviewContent(webview) {
         input[type="text"] { background-color: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border); }
         button, select { background-color: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 1px solid var(--vscode-button-border, transparent); }
         button:hover, select:hover { background-color: var(--vscode-button-hover-background); }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+        .modal-content {
+            background-color: var(--vscode-editor-background);
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid var(--vscode-widget-border);
+            width: 80%;
+            max-width: 700px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+        }
+        .close-button {
+            color: var(--vscode-editor-foreground);
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: #aaa;
+            text-decoration: none;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="p-4">
@@ -230,6 +331,24 @@ function getWebviewContent(webview) {
             <div class="kanban-column rounded-lg p-3" data-status="done"><h2 class="text-lg font-bold mb-3 px-1">Done</h2><div class="column-tasks space-y-3 min-h-[200px]"></div></div>
         </div>
     </div>
+
+    <!-- Task Details Modal -->
+    <div id="taskDetailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2 id="modalTaskTitle" class="text-xl font-bold mb-2"></h2>
+            <p id="modalTaskDescription" class="text-sm text-gray-500 mb-4"></p>
+            <div class="mt-4">
+                <h3 class="font-semibold text-lg mb-2">Details:</h3>
+                <p id="modalTaskDetails" class="whitespace-pre-wrap"></p>
+            </div>
+            <div class="mt-4">
+                <h3 class="font-semibold text-lg mb-2">Documentation:</h3>
+                <ul id="modalDocumentationLinks" class="list-disc pl-5"></ul>
+            </div>
+        </div>
+    </div>
+
     <script nonce="${nonce}">
         (function() {
             const vscode = acquireVsCodeApi();
@@ -245,6 +364,21 @@ function getWebviewContent(webview) {
                 high: { badge: 'bg-red-500 text-white', border: 'border-red-500' },
                 medium: { badge: 'bg-yellow-500 text-black', border: 'border-yellow-500' },
                 low: { badge: 'bg-green-500 text-white', border: 'border-green-500' }
+            };
+
+            // Modal elements
+            const taskDetailsModal = document.getElementById('taskDetailsModal');
+            const closeButton = document.querySelector('.close-button');
+            const modalTaskTitle = document.getElementById('modalTaskTitle');
+            const modalTaskDescription = document.getElementById('modalTaskDescription');
+            const modalTaskDetails = document.getElementById('modalTaskDetails');
+            const modalDocumentationLinks = document.getElementById('modalDocumentationLinks');
+
+            closeButton.onclick = () => { taskDetailsModal.style.display = 'none'; };
+            window.onclick = (event) => {
+                if (event.target == taskDetailsModal) {
+                    taskDetailsModal.style.display = 'none';
+                }
             };
 
             function createTaskElement(task) {
@@ -266,6 +400,12 @@ function getWebviewContent(webview) {
                             <option value="high" \${task.priority === 'high' ? 'selected' : ''}>High</option>
                         </select>
                     </div>\`;
+                card.addEventListener('click', (e) => {
+                    // Tránh kích hoạt khi click vào nút xóa hoặc select box
+                    if (!e.target.closest('.delete-task-btn') && !e.target.closest('.priority-select')) {
+                        vscode.postMessage({ command: 'getTaskDetails', taskId: task.id });
+                    }
+                });
                 return card;
             }
 
@@ -288,9 +428,38 @@ function getWebviewContent(webview) {
                 });
             }
             
+            function displayTaskDetails(task) {
+                console.log("Displaying task details for:", task); // Log để kiểm tra dữ liệu
+                modalTaskTitle.textContent = task.title;
+                modalTaskDescription.textContent = task.description;
+                // Sử dụng innerHTML để hiển thị markdown nếu có
+                modalTaskDetails.innerHTML = task.details || 'No detailed information available.';
+
+                modalDocumentationLinks.innerHTML = '';
+                if (task.documentationLinks && task.documentationLinks.length > 0) {
+                    task.documentationLinks.forEach(link => {
+                        const li = document.createElement('li');
+                        const a = document.createElement('a');
+                        a.href = link.url;
+                        a.textContent = link.title;
+                        a.target = '_blank'; // Mở trong tab mới
+                        a.className = 'text-blue-400 hover:underline';
+                        li.appendChild(a);
+                        modalDocumentationLinks.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = 'No documentation links available.';
+                    modalDocumentationLinks.appendChild(li);
+                }
+                taskDetailsModal.style.display = 'block';
+            }
+
             window.addEventListener('message', event => {
                 if (event.data.command === 'loadTasks') {
                     renderTasks(event.data.tasks);
+                } else if (event.data.command === 'displayTaskDetails') {
+                    displayTaskDetails(event.data.task);
                 }
             });
 
@@ -343,7 +512,7 @@ function getWebviewContent(webview) {
                         vscode.postMessage({ command: 'updateTaskStatus', taskId: draggedTaskId, newStatus: colEl.dataset.status });
                     }
                 });
-});
+            });
         }());
     </script>
 </body>
