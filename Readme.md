@@ -27,7 +27,7 @@ Dán API Key của bạn (bắt đầu bằng AIza...) vào ô. Lấy khóa tạ
 Cảnh báo bảo mật: Không chia sẻ API Key công khai.
 💡 Hướng dẫn Cách sử dụng
 
-![Tutorial](https://github.com/vien105200318/extention-VAIcoding/blob/main/vai-studio-extention/images/tutorial.gif)
+![Tutorial](https://raw.github.com/vien105200318/extention-VAIcoding/blob/main/vai-studio-extention/images/tutorial.gif)
 
 🤝 Đóng góp và Hỗ trợ
 Nhóm Vai-studio luôn hoan nghênh mọi đóng góp.
