@@ -605,7 +605,7 @@ function getWebviewContent(webview: vscode.Webview, initialApiKey: string, user:
             overflow: auto;
             background-color: rgba(0,0,0,0.4);
             padding-top: 60px;
-        }
+            }
         .modal-content {
             background-color: var(--vscode-editor-background);
             margin: 5% auto;
